@@ -1,4 +1,8 @@
 <resources>
-    <string name="app_name">TapAndGo</string>
-    <string name="title_activity_maps">Map</string>
+  <string name="app_name">TapAndGo</string>
+  <string name="title_activity_maps">Map</string>
+  <string name="credit_card_description">Accepte les cartes bancaire</string>
+  <string name="station_open">Ouvert</string>
+  <string name="station_close">Fermé</string>
+  <string name="station_stats">%1$d/%2$d</string>
 </resources>
