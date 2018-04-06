@@ -1,21 +1,25 @@
 package fr.fnoel.tapandgo.activities;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.location.Location;
 import android.os.Bundle;
 import android.os.Handler;
 import android.support.design.widget.BottomSheetBehavior;
 import android.support.v4.app.FragmentActivity;
+import android.support.v4.content.ContextCompat;
 import android.util.Log;
 import android.view.View;
-import android.widget.ImageView;
 import android.widget.TextView;
-import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
-import com.google.android.gms.maps.GoogleMap.OnMapClickListener;
 import com.google.android.gms.maps.GoogleMap.OnMarkerClickListener;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
+import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
@@ -23,85 +27,48 @@ import com.google.maps.DirectionsApi;
 import com.google.maps.GeoApiContext;
 import com.google.maps.PendingResult.Callback;
 import com.google.maps.model.DirectionsResult;
-import com.google.maps.model.DirectionsRoute;
+import com.google.maps.model.TravelMode;
 import fr.fnoel.tapandgo.R;
 import fr.fnoel.tapandgo.fragment.DataFragment;
+import java.util.ArrayList;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+/**
+ * Activité principale affichant la carte et les marqueurs indiquant les positions des stations.
+ */
 public class MapsActivity extends FragmentActivity implements OnMapReadyCallback,
     DataFragment.OnFragmentInteractionListener {
 
+  private static final String KEY_CAMERA_POSITION = "camera_position";
   private static final String TAG = "MAPS_ACTIVITY";
+  private static final String CURRENT_STATION = "CURRENT_STATION";
+  private GeoApiContext context;
   private GoogleMap mMap;
   private JSONArray listeStation = new JSONArray();
-  private static final String CURRENT_STATION = "CURRENT_STATION";
   private JSONObject currentStation;
-  GeoApiContext context;
   private BottomSheetBehavior mBottomSheetBehavior1;
   private Handler handler;
-
-  @Override
-  protected void onCreate(Bundle savedInstanceState) {
-    super.onCreate(savedInstanceState);
-    setContentView(R.layout.activity_maps);
-    SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
-        .findFragmentById(R.id.map);
-    mapFragment.getMapAsync(this);
-
-    handler = new Handler();
-
-    context = new GeoApiContext.Builder().apiKey(getResources().getString(R.string.google_position_key)).build();
-
-    View bottomSheet = findViewById(R.id.bottom_sheet1);
-    mBottomSheetBehavior1 = BottomSheetBehavior.from(bottomSheet);
-    mBottomSheetBehavior1.setHideable(true);
-    mBottomSheetBehavior1.setPeekHeight(300);
-    mBottomSheetBehavior1.setState(BottomSheetBehavior.STATE_HIDDEN);
-
-    String api_key = getResources().getString(R.string.jcdecaux_key);
-    DataFragment mDataFragment = DataFragment.getInstance(getSupportFragmentManager());
-    mDataFragment.startFetching(api_key);
-
-    // GOTO FILTER VIEW
-    // 		startActivity(new Intent(this, MapsActivity.class));
-  }
-
-  @Override
-  protected void onSaveInstanceState(final Bundle outState) {
-    super.onSaveInstanceState(outState);
-    if (currentStation != null) {
-      outState.putString(CURRENT_STATION, currentStation.toString());
-    }
-  }
-
-  @Override
-  protected void onRestoreInstanceState(final Bundle savedInstanceState) {
-    super.onRestoreInstanceState(savedInstanceState);
-    try {
-      currentStation = new JSONObject(savedInstanceState.getString(CURRENT_STATION));
-      displayStationDetails();
-    } catch (JSONException e) {
-      e.printStackTrace();
-    }
-  }
-
-  @Override
-  public void onMapReady(GoogleMap googleMap) {
-    mMap = googleMap;
-    LatLng nantes = new LatLng(47.214617, -1.549949);
-    mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(nantes, 13.0f));
-
-    mMap.setOnMarkerClickListener(onMarkerClickListener);
-    mMap.setOnMapClickListener(new OnMapClickListener() {
-      @Override
-      public void onMapClick(LatLng latLng) {
-        mBottomSheetBehavior1.setState(BottomSheetBehavior.STATE_HIDDEN);
+  private CameraPosition mapPositionState;
+  private FusedLocationProviderClient mFusedLocationClient;
+  private ArrayList<Marker> markers;
+  private Callback<DirectionsResult> directionCallback = new Callback<DirectionsResult>() {
+    @Override
+    public void onResult(DirectionsResult result) {
+      if (result.routes.length > 0 && result.routes[0].legs.length > 0) {
+        handler.post(() -> displayStationDistance(result.routes[0].legs[0].duration.humanReadable));
       }
-    });
-  }
+    }
 
+    @Override
+    public void onFailure(Throwable e) {
+    }
+  };
+  /**
+   * Callback appelée lors d'un clic sur un marqueur.<br/> Si le marqueur est associé à une station, on appelle la
+   * méthode qui affichera les informations de cette station.
+   */
   private OnMarkerClickListener onMarkerClickListener = new OnMarkerClickListener() {
     @Override
     public boolean onMarkerClick(Marker marker) {
@@ -109,6 +76,90 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
       return currentStation != null && displayStationDetails();
     }
   };
+
+  @Override
+  protected void onCreate(Bundle savedInstanceState) {
+    super.onCreate(savedInstanceState);
+    setContentView(R.layout.activity_maps);
+    SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
+    mapFragment.getMapAsync(this);
+
+    handler = new Handler();
+
+    context = new GeoApiContext.Builder().apiKey(getResources().getString(R.string.google_position_key)).build();
+
+    mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+
+    View bottomSheet = findViewById(R.id.bottom_sheet1);
+    mBottomSheetBehavior1 = BottomSheetBehavior.from(bottomSheet);
+    mBottomSheetBehavior1.setHideable(true);
+    mBottomSheetBehavior1.setPeekHeight(300);
+    mBottomSheetBehavior1.setState(BottomSheetBehavior.STATE_HIDDEN);
+
+    // Création d'une instance du fragment utilisé pour récupérer la liste des stations
+    String api_key = getResources().getString(R.string.jcdecaux_key);
+    DataFragment mDataFragment = DataFragment.getInstance(getSupportFragmentManager());
+    mDataFragment.startFetching(api_key);
+
+    // On restaure l'état de la camera en cas de recréation de l'activité
+    if (savedInstanceState != null) {
+      mapPositionState = savedInstanceState.getParcelable(KEY_CAMERA_POSITION);
+    }
+  }
+
+  @Override
+  protected void onSaveInstanceState(final Bundle outState) {
+    if (currentStation != null) {
+      outState.putString(CURRENT_STATION, currentStation.toString());
+    }
+    if (mMap != null) {
+      outState.putParcelable(KEY_CAMERA_POSITION, mMap.getCameraPosition());
+    }
+    super.onSaveInstanceState(outState);
+  }
+
+  @Override
+  protected void onRestoreInstanceState(final Bundle savedInstanceState) {
+    super.onRestoreInstanceState(savedInstanceState);
+    String savedStation = savedInstanceState.getString(CURRENT_STATION);
+
+    if (savedStation != null) {
+      try {
+        currentStation = new JSONObject(savedStation);
+        displayStationDetails();
+      } catch (JSONException e) {
+        e.printStackTrace();
+      }
+    }
+  }
+
+  @Override
+  public void onMapReady(GoogleMap googleMap) {
+    mMap = googleMap;
+
+    // Initialisation de la carte sur Nantes
+    LatLng nantes = new LatLng(47.214617, -1.549949);
+    mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(nantes, 13.0f));
+
+    mMap.setOnMarkerClickListener(onMarkerClickListener);
+
+    // Lors d'un clic sur la carte et pas sur un marqueur, on cache le BottomSheet
+    mMap.setOnMapClickListener((LatLng latLng) -> mBottomSheetBehavior1.setState(BottomSheetBehavior.STATE_HIDDEN));
+
+    // On vérifie que l'application possède l'autorisation d'accéder à la position de l'utilisateur,
+    // si c'est le cas alors on active l'affichage de sa position sur la carte
+    if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+        == PackageManager.PERMISSION_GRANTED) {
+      mMap.setMyLocationEnabled(true);
+    }
+
+    // Dans le cas d'un changement d'état de l'activité,
+    // on récupère l'état de la caméra sauvegardé avant le changement et on restaure cet état
+    if (mapPositionState != null) {
+      mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(mapPositionState.target, mapPositionState.zoom));
+    }
+
+  }
 
   private boolean displayStationDetails() {
     Log.i(TAG, "onMarkerClick: " + currentStation.toString());
@@ -119,6 +170,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     Integer totalStands;
     Integer availableBikes;
     Integer availableStands;
+    double destinationLat;
+    double destinationLng;
 
     findViewById(R.id.station_distance_detail).setVisibility(View.INVISIBLE);
 
@@ -130,15 +183,32 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
       totalStands = currentStation.getInt("bike_stands");
       availableBikes = currentStation.getInt("available_bikes");
       availableStands = currentStation.getInt("available_bike_stands");
+      destinationLat = currentStation.getJSONObject("position").getDouble("lat");
+      destinationLng = currentStation.getJSONObject("position").getDouble("lng");
     } catch (JSONException e) {
       Log.e(TAG,
           "onMarkerClick: Error lors de la récupération des informations de la station depuis les données de l'api", e);
       return false;
     }
 
-    // TODO Corriger les coordonnées utilisées
-    DirectionsApi.newRequest(context).origin("rue de chypre nantes").destination(address)
-        .setCallback(directionCallback);
+    com.google.maps.model.LatLng destination = new com.google.maps.model.LatLng(destinationLat, destinationLng);
+    if (mMap != null) {
+      mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(destinationLat, destinationLng), 15.0f));
+    }
+
+    try {
+      mFusedLocationClient.getLastLocation()
+          .addOnSuccessListener(this, (Location location) -> {
+            if (location != null) {
+              com.google.maps.model.LatLng orign = new com.google.maps.model.LatLng(location.getLatitude(),
+                  location.getLongitude());
+              DirectionsApi.newRequest(context).origin(orign).destination(destination).mode(TravelMode.WALKING)
+                  .setCallback(directionCallback);
+            }
+          });
+    } catch (SecurityException e) {
+      Log.e(TAG, "displayStationDetails: Permission de géolocalisation non accordée", e);
+    }
 
     if (mBottomSheetBehavior1.getState() != BottomSheetBehavior.STATE_EXPANDED) {
       mBottomSheetBehavior1.setState(BottomSheetBehavior.STATE_EXPANDED);
@@ -167,20 +237,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     return true;
   }
 
-  private Callback<DirectionsResult> directionCallback = new Callback<DirectionsResult>() {
-    @Override
-    public void onResult(DirectionsResult result) {
-      if (result.routes.length > 0 && result.routes[0].legs.length > 0) {
-        handler.post(() -> displayStationDistance(result.routes[0].legs[0].duration.humanReadable));
-      }
-    }
-
-    @Override
-    public void onFailure(Throwable e) {
-
-    }
-  };
-
   private void displayStationDistance(String duration) {
     findViewById(R.id.station_distance_detail).setVisibility(View.VISIBLE);
     ((TextView) findViewById(R.id.station_eta)).setText(duration);
@@ -196,7 +252,13 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     }
   }
 
+  /**
+   * Initialise les marqueurs de la carte à partir de la liste des stations récupérée.
+   *
+   * @throws JSONException en cas d'erreur de lecture des objets json
+   */
   private void initLocation() throws JSONException {
+    markers = new ArrayList<>();
     for (int i = 0; i < listeStation.length(); i++) {
       JSONObject station = listeStation.getJSONObject(i);
       JSONObject pos = station.getJSONObject("position");
@@ -205,19 +267,23 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
       String status = station.getString("status");
       int availableBike = station.getInt("available_bikes");
 
+      Marker marker;
       if ("OPEN".equals(status)) {
         if (availableBike == 0) {
-          mMap.addMarker(new MarkerOptions().position(coordStation)
-              .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))).setTag(station);
+          marker = mMap.addMarker(new MarkerOptions().position(coordStation)
+              .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_YELLOW)));
+          marker.setTag(station);
         } else {
-          mMap.addMarker(new MarkerOptions().position(coordStation)
-              .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN))).setTag(station);
+          marker = mMap.addMarker(new MarkerOptions().position(coordStation)
+              .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)));
+          marker.setTag(station);
         }
       } else {
-        mMap.addMarker(new MarkerOptions().position(coordStation)
-            .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ROSE))).setTag(station);
+        marker = mMap.addMarker(new MarkerOptions().position(coordStation)
+            .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)));
+        marker.setTag(station);
       }
+      markers.add(marker);
     }
   }
-
 }

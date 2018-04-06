@@ -9,8 +9,52 @@
   android:theme="@style/Theme.AppCompat.Light"
   tools:context=".activities.MapsActivity">
 
+
+  <android.support.design.widget.AppBarLayout
+    android:id="@+id/appbar"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+    <android.support.v7.widget.Toolbar
+      xmlns:android="http://schemas.android.com/apk/res/android"
+      xmlns:app="http://schemas.android.com/apk/res-auto"
+      android:id="@+id/main_toolbar"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:background="@android:color/background_light"
+      android:elevation="4dp"
+      android:theme="@style/ThemeOverlay.AppCompat.ActionBar"
+      app:layout_scrollFlags="scroll|enterAlways"
+      app:popupTheme="@style/ThemeOverlay.AppCompat.Light">
+      <TextView
+        style="@style/Base.TextAppearance.Widget.AppCompat.Toolbar.Title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/app_name"/>
+      <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginEnd="10dp"
+        android:gravity="end"
+        android:orientation="horizontal">
+        <ImageView
+          android:layout_width="wrap_content"
+          android:layout_height="match_parent"
+          android:layout_marginEnd="10dp"
+          android:src="@drawable/ic_filter_list"/>
+        <ImageView
+          android:id="@+id/goto_list_view"
+          android:layout_width="wrap_content"
+          android:layout_height="match_parent"
+          android:layout_marginEnd="6dp"
+          android:clickable="true"
+          android:focusable="true"
+          android:src="@drawable/ic_view_list"
+          android:visibility="gone"/>
+      </LinearLayout>
+    </android.support.v7.widget.Toolbar>
+  </android.support.design.widget.AppBarLayout>
+
   <fragment xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:map="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/map"
     android:layout_width="match_parent"
@@ -22,14 +66,15 @@
     android:id="@+id/bottom_sheet1"
     android:layout_width="match_parent"
     android:layout_height="150dp"
+    android:padding="16dp"
     android:background="@android:color/background_light"
     android:clipToPadding="true"
+    android:elevation="36dp"
     app:layout_behavior="android.support.design.widget.BottomSheetBehavior">
 
     <LinearLayout
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
-      android:padding="16dp"
       android:orientation="vertical"
       android:textSize="16sp">
 
@@ -44,6 +89,25 @@
           android:layout_height="match_parent"
           android:layout_toStartOf="@+id/station_open"
           tools:text="test"/>
+        <LinearLayout
+          android:id="@+id/station_distance_detail"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:layout_alignEnd="@id/station_name"
+          android:paddingStart="5dp"
+          android:paddingEnd="5dp"
+          android:orientation="horizontal"
+          android:visibility="invisible"
+          tools:visibility="visible">
+          <ImageView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:src="@drawable/ic_directions_walk_black_24dp"/>
+          <TextView
+            android:id="@+id/station_eta"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+        </LinearLayout>
         <TextView
           android:id="@+id/station_open"
           android:layout_width="wrap_content"
@@ -72,44 +136,18 @@
           tools:text="ouvert"/>
       </RelativeLayout>
 
-      <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="horizontal">
-        <TextView
-          android:id="@+id/station_address"
-          android:layout_width="wrap_content"
-          android:layout_height="wrap_content"
-          tools:text="adresse"/>
-        <LinearLayout
-          android:id="@+id/station_distance_detail"
-          android:layout_width="match_parent"
-          android:layout_height="match_parent"
-          android:orientation="horizontal"
-          android:visibility="invisible"
-          tools:visibility="visible">
-          <ImageView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:src="@drawable/ic_directions_walk_black_24dp"/>
-          <TextView
-            android:id="@+id/station_eta"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
-        </LinearLayout>
-      </LinearLayout>
-
-      <ImageView
-        android:id="@+id/station_banking"
+      <TextView
+        android:id="@+id/station_address"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:contentDescription="@string/credit_card_description"
-        android:src="@drawable/ic_credit_card"
-        android:visibility="invisible"/>
+        android:layout_marginBottom="30dp"
+        tools:text="adresse"/>
+
       <LinearLayout
         android:id="@+id/station_details"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:layout_marginBottom="5dp"
         android:orientation="horizontal">
         <ImageView
           android:id="@+id/imageBike"
@@ -133,6 +171,14 @@
           android:layout_width="wrap_content"
           android:layout_height="wrap_content"
           android:layout_weight="2"/>
+        <ImageView
+          android:id="@+id/station_banking"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:layout_weight="1"
+          android:contentDescription="@string/credit_card_description"
+          android:src="@drawable/ic_credit_card"
+          android:visibility="invisible"/>
       </LinearLayout>
     </LinearLayout>
   </android.support.v4.widget.NestedScrollView>

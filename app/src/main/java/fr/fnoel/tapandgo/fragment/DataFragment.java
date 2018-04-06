@@ -1,31 +1,23 @@
 package fr.fnoel.tapandgo.fragment;
 
 import android.content.Context;
-import android.net.ConnectivityManager;
-import android.net.NetworkInfo;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
-import fr.fnoel.tapandgo.R;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URL;
-import org.json.JSONArray;
-import org.json.JSONException;
 
 /**
- * A simple {@link Fragment} subclass. Activities that contain this fragment must implement the {@link
- * DataFragment.OnFragmentInteractionListener} interface to handle interaction events. Use the {@link
- * DataFragment#getInstance} factory method to create an instance of this fragment.
+ * Fragment utilisé pour effectuer des opérations réseaux afin d'éviter de bloquer le thread principal.<br/> Ce fragment
+ * est utilisé pour récupérer la liste des stations et les renvoyé à l'activité principale ensuite.<br/> Pour utiliser
+ * ce fragment, il faut d'abord en récupérer une instance en utilisant {@link DataFragment#getInstance}
  */
 public class DataFragment extends Fragment {
 
   private static final String TAG = "DataFragment";
-
-  private static final String API_KEY = "API_KEY";
-
   private static final String URL = "https://api.jcdecaux.com/vls/v1/stations?contract=Nantes&apiKey=";
   private OnFragmentInteractionListener mListener;
   private DownloadTask mDownloadTask;
@@ -47,6 +39,7 @@ public class DataFragment extends Fragment {
   @Override
   public void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
+    // On indique que ce fragment sera persistant afin que les opérations réseaux ne soient pas stoppées en exécution
     setRetainInstance(true);
   }
 
@@ -65,9 +58,15 @@ public class DataFragment extends Fragment {
   @Override
   public void onDetach() {
     super.onDetach();
+    cancelFetching();
     mListener = null;
   }
 
+  /**
+   * Méthode permettant de créer l'{@link AsyncTask} qui récupèrera la liste des stations.
+   *
+   * @param api_key clé de l'API
+   */
   public void startFetching(String api_key) {
     mDownloadTask = new DownloadTask(this);
     mDownloadTask.execute(URL.concat(api_key));
@@ -81,10 +80,7 @@ public class DataFragment extends Fragment {
 
 
   /**
-   * This interface must be implemented by activities that contain this fragment to allow an interaction in this
-   * fragment to be communicated to the activity and potentially other fragments contained in that activity. <p> See the
-   * Android Training lesson <a href= "http://developer.android.com/training/basics/fragments/communicating.html"
-   * >Communicating with Other Fragments</a> for more information.
+   * Interface permettant de communiquer avec l'activité pour renvoyer le résultat de l'appel à l'API
    */
   public interface OnFragmentInteractionListener {
 
@@ -92,7 +88,8 @@ public class DataFragment extends Fragment {
   }
 
   /**
-   * Implementation of AsyncTask designed to fetch data from the network.
+   * AsyncTask est le thread qui fera les appels réseaux sans bloquer le thread principal.<br/> Il prend en entrée l'url
+   * de l'API et renvoie un wrapper contenant la liste des stations.
    */
   private static class DownloadTask extends AsyncTask<String, Integer, DownloadTask.Result> {
 
@@ -121,24 +118,10 @@ public class DataFragment extends Fragment {
       }
     }
 
-    /**
-     * Cancel background network operation if we do not have network connectivity.
-     */
     @Override
     protected void onPreExecute() {
-//			if (fragment != null) {
-//				NetworkInfo networkInfo = fragment.getActiveNetworkInfo();
-//				if (networkInfo == null || !networkInfo.isConnected() ||
-//						(networkInfo.getType() != ConnectivityManager.TYPE_WIFI
-//								&& networkInfo.getType() != ConnectivityManager.TYPE_MOBILE)) {
-//					cancel(true);
-//				}
-//			}
     }
 
-    /**
-     * Defines work to perform on the background thread.
-     */
     @Override
     protected DownloadTask.Result doInBackground(String... urls) {
       Result result = null;
@@ -155,18 +138,16 @@ public class DataFragment extends Fragment {
       return result;
     }
 
-    private String downloadUrl(URL url) {
+    private String downloadUrl(URL url) throws IOException {
       StringBuilder result = new StringBuilder();
 
       try (InputStreamReader isr = new InputStreamReader(url.openStream())) {
         try (BufferedReader br = new BufferedReader(isr)) {
           String line;
           while ((line = br.readLine()) != null) {
-            result.append(line + "\n");
+            result.append(line).append("\n");
           }
         }
-      } catch (IOException e) {
-        e.printStackTrace();
       }
 
       return result.toString();
@@ -174,7 +155,8 @@ public class DataFragment extends Fragment {
 
 
     /**
-     * Updates the DownloadCallback with the result.
+     * Méthode appelée une fois que la récupération est terminée.<br/> Elle utilise l'interface {@link
+     * OnFragmentInteractionListener} pour envoyer le résultat à l'activité principale.
      */
     @Override
     protected void onPostExecute(Result result) {
@@ -183,9 +165,6 @@ public class DataFragment extends Fragment {
       }
     }
 
-    /**
-     * Override to add special behavior for cancelled AsyncTask.
-     */
     @Override
     protected void onCancelled(Result result) {
     }
