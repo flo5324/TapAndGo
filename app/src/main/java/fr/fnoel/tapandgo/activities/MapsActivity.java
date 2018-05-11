@@ -29,8 +29,12 @@ import com.google.maps.PendingResult.Callback;
 import com.google.maps.model.DirectionsResult;
 import com.google.maps.model.TravelMode;
 import fr.fnoel.tapandgo.R;
-import fr.fnoel.tapandgo.fragment.DataFragment;
+import java.io.IOException;
 import java.util.ArrayList;
+import okhttp3.Call;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -38,12 +42,12 @@ import org.json.JSONObject;
 /**
  * Activité principale affichant la carte et les marqueurs indiquant les positions des stations.
  */
-public class MapsActivity extends FragmentActivity implements OnMapReadyCallback,
-    DataFragment.OnFragmentInteractionListener {
+public class MapsActivity extends FragmentActivity implements OnMapReadyCallback {
 
   private static final String KEY_CAMERA_POSITION = "camera_position";
   private static final String TAG = "MAPS_ACTIVITY";
   private static final String CURRENT_STATION = "CURRENT_STATION";
+  private static final String URL_API = "https://api.jcdecaux.com/vls/v1/stations?contract=Nantes&apiKey=";
   private GeoApiContext context;
   private GoogleMap mMap;
   private JSONArray listeStation = new JSONArray();
@@ -96,16 +100,48 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     mBottomSheetBehavior1.setPeekHeight(300);
     mBottomSheetBehavior1.setState(BottomSheetBehavior.STATE_HIDDEN);
 
-    // Création d'une instance du fragment utilisé pour récupérer la liste des stations
-    String api_key = getResources().getString(R.string.jcdecaux_key);
-    DataFragment mDataFragment = DataFragment.getInstance(getSupportFragmentManager());
-    mDataFragment.startFetching(api_key);
+    // récupérer la liste des stations
+    run();
 
     // On restaure l'état de la camera en cas de recréation de l'activité
     if (savedInstanceState != null) {
       mapPositionState = savedInstanceState.getParcelable(KEY_CAMERA_POSITION);
     }
   }
+
+  void run() {
+    String api_key = getResources().getString(R.string.jcdecaux_key);
+    OkHttpClient client = new OkHttpClient();
+
+    Request request = new Request.Builder()
+        .url(URL_API.concat(api_key))
+        .build();
+
+    client.newCall(request).enqueue(new okhttp3.Callback() {
+      @Override
+      public void onFailure(Call call, IOException e) {
+        call.cancel();
+      }
+
+      @Override
+      public void onResponse(Call call, Response response) throws IOException {
+
+        final String json = response.body().string();
+
+        MapsActivity.this.runOnUiThread(() -> {
+          Log.i(TAG, "onCreate: " + json);
+          try {
+            listeStation = new JSONArray(json);
+            initLocation();
+          } catch (JSONException e) {
+            e.printStackTrace();
+          }
+        });
+
+      }
+    });
+  }
+
 
   @Override
   protected void onSaveInstanceState(final Bundle outState) {
@@ -240,16 +276,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
   private void displayStationDistance(String duration) {
     findViewById(R.id.station_distance_detail).setVisibility(View.VISIBLE);
     ((TextView) findViewById(R.id.station_eta)).setText(duration);
-  }
-
-  @Override
-  public void onFragmentInteraction(String json) {
-    try {
-      listeStation = new JSONArray(json);
-      initLocation();
-    } catch (JSONException e) {
-      e.printStackTrace();
-    }
   }
 
   /**
